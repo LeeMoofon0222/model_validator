@@ -12,6 +12,9 @@ import joblib
 import json
 from datetime import datetime
 
+
+
+
 def process_data(data, categorical_columns, target_column):
     """類別編碼和資料平衡"""
     for col in categorical_columns:
@@ -24,6 +27,7 @@ def process_data(data, categorical_columns, target_column):
     grouped = data.groupby(target_column)
     return grouped.apply(lambda x: x.sample(grouped.size().min())).reset_index(drop=True)
 
+
 def handle_outliers(data, numeric_columns):
     """處理離散值"""
     for column in numeric_columns:
@@ -34,17 +38,30 @@ def handle_outliers(data, numeric_columns):
             data = data[(data[column] >= Q1 - 1.5 * IQR) & (data[column] <= Q3 + 1.5 * IQR)]
     return data
 
+
 def create_sample(data, target_column, sample_size):
     """創建平衡樣本"""
     df_0 = data[data[target_column] == 0].sample(n=sample_size, random_state=42)
     df_1 = data[data[target_column] == 1].sample(n=sample_size, random_state=42)
     return pd.concat([df_0, df_1]).sample(frac=1, random_state=42).reset_index(drop=True)
 
+
 def split_data(data, target_column, test_size=0.2):
-    """分割訓練和測試集"""
+    """分割訓練和測試集，並保存"""
     X = data.drop(target_column, axis=1)
     y = data[target_column]
-    return train_test_split(X, y, test_size=test_size, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
+    
+    # 合併特徵和標籤
+    train_data = pd.concat([X_train, y_train], axis=1)
+    test_data = pd.concat([X_test, y_test], axis=1)
+    
+    # 保存訓練集和測試集
+    train_data.to_csv('train.csv', index=False)
+    test_data.to_csv('test.csv', index=False)
+    
+    return X_train, X_test, y_train, y_test
+
 
 def train_model(X_train, y_train, X_test, y_test, model_type='rf', params=None):
     """
@@ -135,6 +152,8 @@ def evaluate_model(y_pred, y_true, save_path=None):
         'roc_auc': roc_auc,
         'confusion_matrix': conf_matrix.tolist()
     }
+
+
 
 # 使用範例
 if __name__ == "__main__":
