@@ -12,7 +12,7 @@ def main():
 
 
     # User Choose Model
-    model_path = 'data_model/diabetes/rf.joblib'
+    model_path = 'data_model/diabetes/lgbm.joblib'
     model_type = 'rf or xgboost or lgbm' #user choose
 
     # Upload Train Data
@@ -29,7 +29,7 @@ def main():
 
     # Choose Target Column
     feature_names = list(train_data.columns)
-    print(feature_names)
+    #print(feature_names)
     target = 'Diabetes_binary'
     sample = test_data.iloc[0].values
 
@@ -49,9 +49,9 @@ def main():
     # User Choose Explain Method
     lime = True
     shap = False
-    quality_check = False
-    fairness_check = False
-    drift_check = False
+    quality_check = True
+    fairness_check = True
+    drift_check = True
 
     # Explain
     if lime:
@@ -75,6 +75,7 @@ def main():
             feature_names=feature_names
         )
 
+
     # Quality Check
     if quality_check:
         # 評估模型品質
@@ -93,14 +94,15 @@ def main():
         )
         quality_metrics['confusion_matrix'] = confusion_matrix
 
+
     # Fairness Check
     if fairness_check:
         # 評估模型公平性
-        protected_attribute = 'Gender'  # 假設使用性別作為保護屬性
+        protected_attributes = ['Age', 'Sex']  # 可以加入多個保護屬性(user choose column)
         fairness_metrics = fairness.assess_fairness(
             model_path=model_path,
             test_data=test_data,
-            protected_attribute=protected_attribute,
+            protected_attributes=protected_attributes,
             target_column=target
         )
         
@@ -108,23 +110,28 @@ def main():
         group_metrics = fairness.get_group_metrics(
             model_path=model_path,
             test_data=test_data,
-            protected_attribute=protected_attribute,
+            protected_attributes=protected_attributes,
             target_column=target
         )
         fairness_metrics['group_metrics'] = group_metrics
 
+
     # Drift Check
     if drift_check:
+        # 由於 train_data 已經刪除了目標欄位，我們可以直接使用它
+        reference_data = train_data
+        current_data = test_data.drop(columns=[target])
+        
         # 檢測特徵漂移
         drift_results = drift.detect_feature_drift(
-            reference_data=train_data.drop(columns=[target]),
-            current_data=test_data.drop(columns=[target])
+            reference_data=reference_data,
+            current_data=current_data
         )
         
         # 計算詳細的漂移指標
         drift_metrics = drift.calculate_drift_metrics(
-            reference_data=train_data.drop(columns=[target]),
-            current_data=test_data.drop(columns=[target])
+            reference_data=reference_data,
+            current_data=current_data
         )
         
         # 生成漂移報告

@@ -160,13 +160,13 @@ if __name__ == "__main__":
     # 讀取資料
     data = pd.read_csv('data_model/diabetes/origin.csv')
     data = data.astype(int)
-    # 數據預處理
+    # # 數據預處理
     # data = process_data(data, categorical_columns=['col1', 'col2'], target_column='target')
     
-    # 處理異常值
+    # # 處理異常值
     # data = handle_outliers(data, numeric_columns=['col3', 'col4'])
     
-    # 創建平衡樣本
+    # # 創建平衡樣本
     # data = create_sample(data, target_column='target', sample_size=5000)
     
     # 分割資料
@@ -177,22 +177,15 @@ if __name__ == "__main__":
     # results = train_model(X_train, y_train, X_test, y_test, model_type='rf')
     
     # 使用XGBoost，自定義參數
-    # custom_params = {'n_estimators': 200, 'max_depth': 8, 'learning_rate': 0.05}
+    # custom_params = {'n_estimators': 300, 'max_depth': 6, 'learning_rate': 0.05}
     # results = train_model(X_train, y_train, X_test, y_test, model_type='xgb', params=custom_params)
     
     # 使用LightGBM
-    # results = train_model(X_train, y_train, X_test, y_test, model_type='lgbm')
+    results = train_model(X_train, y_train, X_test, y_test, model_type='lgbm')
 
 
-    results = train_model(X_train, y_train, X_test, y_test, model_type='rf')
 
-    joblib.dump(results['model'], 'rf_model.joblib')
-
-    # metrics = results['metrics']
-
-    # print(f"Accuracy: {metrics['accuracy']:.4f}")
-    # print(f"F1-Score: {metrics['f1_score']:.4f}")
-    # print(f"ROC AUC: {metrics['roc_auc']:.4f}")
+    joblib.dump(results['model'], 'lgbm.joblib')
 
 
     # loaded_model = joblib.load('diabetes_model_rf.joblib')  # 載入模型
