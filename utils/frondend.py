@@ -1,11 +1,3 @@
-import pandas as pd
-import joblib
-from lime.lime_tabular import LimeTabularExplainer
-import shap
-import numpy as np
-import tkinter as tk
-from tkinter import filedialog, ttk, messagebox
-
 def first_page():
     # Create window
     root = tk.Tk()
@@ -26,11 +18,11 @@ def first_page():
     # Initialize global variables after creating the root window
     selected_model = tk.StringVar()
     selected_target = tk.StringVar()
-    selected_value = tk.StringVar()
+    selected_threshold = tk.StringVar()  # For classification threshold
     selected_metrics = {}
     model_types = ["rf", "xgboost", "lgbm"]
     target_types = ["classification", "numeric"]
-    target_values = [0, 1]
+    thresholds = ["over 0", "over 1"]
 
     # Functions
     def upload_model():
@@ -38,9 +30,8 @@ def first_page():
         if filepath:
             global model_path
             model_path = filepath
-            #selected_model.set(model_path)
             messagebox.showinfo("Upload model successful", f"Chosen model:\n{filepath}")
-            model_type_dropdown.config(state="normal")  # Enable dropdown after uploading model
+            model_dropdown.config(state="normal")  # Enable dropdown after uploading model
 
     def upload_train_data():
         filepath = filedialog.askopenfilename(title="Upload data", filetypes=[("Data Files", "*.csv *.json *.xlsx")])
@@ -50,8 +41,6 @@ def first_page():
             if 'Diabetes_binary' in train_data.columns:
                 train_data = train_data.drop('Diabetes_binary', axis=1)
             messagebox.showinfo("Upload data successful", f"Chosen data:\n{filepath}")
-
-            # Update feature list after loading training data
             update_feature_checkbuttons()
 
     def upload_test_data():
@@ -75,18 +64,18 @@ def first_page():
     def confirm_selection():
         selected = selected_model.get()
         metrics = [metric for metric, value in selected_metrics.items() if value.get()]
-        value = selected_value.get() if selected_target.get() == "classification" else "N/A"
-        messagebox.showinfo("Selection Confirmation", f"Chosen model: {selected}\nEvaluation metrics: {', '.join(metrics)}\nThreshold: {value}")
-
+        threshold = selected_threshold.get() if selected_target.get() == "classification" else "N/A"
+        messagebox.showinfo("Selection Confirmation", f"Chosen model: {selected}\nEvaluation metrics: {', '.join(metrics)}\nThreshold: {threshold}")
 
     def on_target_change(*args):
         if selected_target.get() == "classification":
             threshold_dropdown.config(state="normal")
         else:
             threshold_dropdown.config(state="disabled")
-            selected_value.set(target_values[0])  # Reset the threshold selection
+            selected_threshold.set("")  # Reset the threshold selection
 
-
+    # Bind target change event
+    selected_target.trace("w", on_target_change)
 
     # Left and right frames
     left_frame = tk.Frame(root, width=600, bg="#f0f0f0")
@@ -112,23 +101,21 @@ def first_page():
 
     # Select model type
     tk.Label(left_frame, text="Choose model types:", bg="#f0f0f0").pack(anchor="center", pady=5)
-    model_type_dropdown = tk.OptionMenu(left_frame, selected_model, *model_types)
-    model_type_dropdown.config(state="normal")  # Disable dropdown initially
-    model_type_dropdown.pack(anchor="center", pady=5)
+    model_dropdown = tk.OptionMenu(left_frame, selected_model, *model_types)
+    model_dropdown.config(state="disabled")  # Disable dropdown initially
+    model_dropdown.pack(anchor="center", pady=5)
     selected_model.set(model_types[0])
 
     tk.Label(left_frame, text="Choose target types:", bg="#f0f0f0").pack(anchor="center", pady=5)
-    model_dropdown = tk.OptionMenu(left_frame, selected_target, *target_types)
-    model_dropdown.pack(anchor="center", pady=5)
+    target_dropdown = tk.OptionMenu(left_frame, selected_target, *target_types)
+    target_dropdown.pack(anchor="center", pady=5)
     selected_target.set(target_types[0])
 
-    tk.Label(left_frame, text="Choose target value:", bg="#f0f0f0").pack(anchor="center", pady=5)
-    threshold_dropdown = tk.OptionMenu(left_frame, selected_value, *target_values)
-    threshold_dropdown.config(state="normal")  # Initially disabled
+    tk.Label(left_frame, text="Choose classification threshold:", bg="#f0f0f0").pack(anchor="center", pady=5)
+    threshold_dropdown = tk.OptionMenu(left_frame, selected_threshold, *thresholds)
+    threshold_dropdown.config(state="disabled")  # Initially disabled
     threshold_dropdown.pack(anchor="center", pady=5)
-    selected_value.set(target_values[0])
-    # Bind target change event
-    selected_target.trace("w", on_target_change)
+    selected_threshold.set(thresholds[0])
 
     # Right frame content
     tk.Label(right_frame, text="Features", font=("Arial", 12, "bold"), bg="#ffffff").pack(anchor="center", pady=5)
