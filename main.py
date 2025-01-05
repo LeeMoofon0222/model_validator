@@ -15,25 +15,28 @@ def main():
     
 
     # User Choose Model
-    model_path = 'data_model/diabetes/lgbm.joblib'
+    model_path = 'data_model/churn/lgbm.joblib' #user choose
     model_type = 'rf or xgboost or lgbm' #user choose
 
     # Upload Train Data
-    train_data = pd.read_csv('data_model/diabetes/train.csv')
-    train_data = train_data.drop('Diabetes_binary', axis=1)
+    train_data = pd.read_csv('data_model/churn/train.csv')
+    target_column = 'Tenure' #user choose
+    train_data = train_data.drop(target_column, axis=1)
     target_type = 'classification or regression' #user choose
-    target_type = 'classification'
+    target_type = 'regression'
     if target_type == 'classification':
         #user input two values
         target_values = [0, 1]
+    else:
+        target_values = []
 
     # Upload Test Data
-    test_data = pd.read_csv('data_model/diabetes/test.csv')
+    test_data = pd.read_csv('data_model/churn/test.csv')
 
     # Choose Target Column
     feature_names = list(train_data.columns)
     #print(feature_names)
-    target = 'Diabetes_binary'
+    
     sample = test_data.iloc[0].values
 
 
@@ -84,28 +87,31 @@ def main():
         # 評估模型品質
         quality_metrics = quality.assess_model_quality(
             model_path=model_path,
-            test_data=test_data.drop(columns=[target]), 
-            test_labels=test_data[target],
-            feature_names=feature_names
+            test_data=test_data.drop(columns=[target_column]), 
+            test_labels=test_data[target_column],
+            feature_names=feature_names,
+            target_type=target_type
         )
         
-        # 獲取混淆矩陣
-        quality_metrics['confusion_matrix'] = quality.get_confusion_matrix(
-            model_path=model_path,
-            test_data=test_data.drop(columns=[target]),
-            test_labels=test_data[target]
-        )
+        if target_type == 'classification':
+            # 獲取混淆矩陣
+            quality_metrics['confusion_matrix'] = quality.get_confusion_matrix(
+                model_path=model_path,
+                test_data=test_data.drop(columns=[target_column]),
+                test_labels=test_data[target_column]
+            )
 
 
     # Fairness Check
     if fairness_check:
         # 評估模型公平性
-        protected_attributes = ['Age', 'Sex']  # 可以加入多個保護屬性(user choose column)
+        protected_attributes = ['Age', 'Gender']  # 可以加入多個保護屬性(user choose column)
         fairness_metrics = fairness.assess_fairness(
             model_path=model_path,
             test_data=test_data,
             protected_attributes=protected_attributes,
-            target_column=target
+            target_column=target_column,
+            target_type=target_type
         )
         
         # 獲取群組指標
@@ -113,7 +119,8 @@ def main():
             model_path=model_path,
             test_data=test_data,
             protected_attributes=protected_attributes,
-            target_column=target
+            target_column=target_column,
+            target_type=target_type
         )
 
 
@@ -121,7 +128,7 @@ def main():
     if drift_check:
         # 由於 train_data 已經刪除了目標欄位，我們可以直接使用它
         reference_data = train_data
-        current_data = test_data.drop(columns=[target])
+        current_data = test_data.drop(columns=[target_column])
         
         # 檢測特徵漂移
         drift_results = drift.detect_feature_drift(
@@ -154,7 +161,8 @@ def main():
         explanation_results=explaination_metrics,
         fairness_metrics=fairness_metrics,
         quality_metrics=quality_metrics,
-        drift_metrics=drift_metrics
+        drift_metrics=drift_metrics,
+        target_type=target_type,
     )
 
     print(explanation_result, fairness_result, quality_result, drift_result, improve_result)

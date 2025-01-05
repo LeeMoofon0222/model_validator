@@ -145,69 +145,160 @@ import openai
 from dotenv import load_dotenv
 import os
 
-
-def format_explanation(explanation_results):
-    """Format prediction explanation section"""
+def format_explanation(explanation_results, target_type='classification'):
+    """Format prediction explanation section with safe handling of different result structures
+    
+    Parameters:
+    -----------
+    explanation_results : dict
+        預測解釋結果字典
+    target_type : str
+        'classification' 或 'regression'
+        
+    Returns:
+    --------
+    str : 格式化的解釋文本
+    """
     explanation = "Model Analysis Report\n\n"
     explanation += "1. Single Sample Prediction Explanation\n"
     
-    # Prediction probabilities
-    probs = explanation_results['prediction_probability']
-    explanation += f"Prediction probability distribution: [{probs[0]:.3f}, {probs[1]:.3f}]\n\n"
+    try:
+        if target_type == 'classification':
+            # 安全地獲取分類問題的預測機率
+            if 'prediction_probability' in explanation_results:
+                probs = explanation_results['prediction_probability']
+                if isinstance(probs, (list, tuple)) and len(probs) >= 2:
+                    explanation += f"Prediction probability distribution: [{probs[0]:.3f}, {probs[1]:.3f}]\n\n"
+                else:
+                    explanation += f"Prediction probability: {probs}\n\n"
+            elif 'predicted_class' in explanation_results:
+                explanation += f"Predicted class: {explanation_results['predicted_class']}\n\n"
+        else:  # regression
+            # 安全地獲取回歸問題的預測值
+            prediction = None
+            if 'prediction_value' in explanation_results:
+                prediction = explanation_results['prediction_value']
+            elif 'prediction' in explanation_results:
+                prediction = explanation_results['prediction']
+            elif 'predicted_value' in explanation_results:
+                prediction = explanation_results['predicted_value']
+                
+            if prediction is not None:
+                explanation += f"Predicted value: {float(prediction):.3f}\n"
+                
+                # 如果有信賴區間，添加它
+                if 'confidence_interval' in explanation_results:
+                    ci = explanation_results['confidence_interval']
+                    explanation += f"95% Confidence Interval: [{ci[0]:.3f}, {ci[1]:.3f}]\n"
+                elif 'prediction_interval' in explanation_results:
+                    pi = explanation_results['prediction_interval']
+                    explanation += f"95% Prediction Interval: [{pi[0]:.3f}, {pi[1]:.3f}]\n"
+            else:
+                explanation += "Prediction value not available\n"
+            
+            explanation += "\n"
     
-    explanation += "Feature Importance:\n"
-    # Sort feature importance by absolute value
-    feature_imp = explanation_results['feature_importance']
-    sorted_features = sorted(feature_imp, key=lambda x: abs(x[1]), reverse=True)[:5]
+    except Exception as e:
+        explanation += f"Error processing prediction results: {str(e)}\n\n"
     
-    for i, (feature, importance) in enumerate(sorted_features, 1):
-        explanation += f"{i}. {feature}: {importance:+.2f}%\n"
+    try:
+        # 特徵重要性部分
+        explanation += "Feature Importance:\n"
+        if 'feature_importance' in explanation_results:
+            feature_imp = explanation_results['feature_importance']
+            # 確保特徵重要性是可排序的格式
+            if isinstance(feature_imp, dict):
+                sorted_features = sorted(feature_imp.items(), key=lambda x: abs(float(x[1])), reverse=True)[:5]
+            elif isinstance(feature_imp, (list, tuple)):
+                sorted_features = sorted(feature_imp, key=lambda x: abs(float(x[1])), reverse=True)[:5]
+            else:
+                sorted_features = []
+                
+            for i, (feature, importance) in enumerate(sorted_features, 1):
+                # 確保重要性值可以被格式化為百分比
+                try:
+                    imp_value = float(importance)
+                    explanation += f"{i}. {feature}: {imp_value:+.2f}%\n"
+                except (ValueError, TypeError):
+                    explanation += f"{i}. {feature}: {importance}\n"
+        else:
+            explanation += "Feature importance information not available\n"
+            
+    except Exception as e:
+        explanation += f"Error processing feature importance: {str(e)}\n"
     
     return explanation
 
-def format_fairness_analysis(fairness_metrics):
+def format_fairness_analysis(fairness_metrics, target_type='classification'):
     """Format fairness analysis section"""
     fairness = "\n2. Model Fairness Assessment\n"
     
     # Process each protected attribute
     for attribute, metrics in fairness_metrics['group_metrics'].items():
         fairness += f"\n{attribute} Analysis\n"
-        # Basic metrics
-        fairness += f"* Accuracy Difference: {metrics['accuracy_difference']*100:.2f}% "
-        fairness += f"(Group 0: {metrics['group_0_accuracy']*100:.2f}%, "
-        fairness += f"Group 1: {metrics['group_1_accuracy']*100:.2f}%)\n"
-        # Group sizes
+        
+        # 基本群組資訊
         fairness += f"* Group Sample Size - Group 0: {metrics['group_0_size']}, Group 1: {metrics['group_1_size']}\n"
-        # Other performance metrics
-        fairness += f"* Precision - Group 0: {metrics['group_0_precision']*100:.2f}%, Group 1: {metrics['group_1_precision']*100:.2f}%\n"
-        fairness += f"* Recall - Group 0: {metrics['group_0_recall']*100:.2f}%, Group 1: {metrics['group_1_recall']*100:.2f}%\n"
+        
+        if target_type == 'classification':
+            # 分類指標
+            fairness += f"* Accuracy Difference: {metrics['accuracy_difference']*100:.2f}% "
+            fairness += f"(Group 0: {metrics['group_0_accuracy']*100:.2f}%, "
+            fairness += f"Group 1: {metrics['group_1_accuracy']*100:.2f}%)\n"
+            fairness += f"* Precision - Group 0: {metrics['group_0_precision']*100:.2f}%, Group 1: {metrics['group_1_precision']*100:.2f}%\n"
+            fairness += f"* Recall - Group 0: {metrics['group_0_recall']*100:.2f}%, Group 1: {metrics['group_1_recall']*100:.2f}%\n"
+        else:
+            # 回歸指標
+            fairness += "* Performance Metrics:\n"
+            # RMSE比較
+            fairness += f"  - RMSE - Group 0: {metrics['group_0_rmse']:.3f}, Group 1: {metrics['group_1_rmse']:.3f}\n"
+            fairness += f"  - RMSE Difference: {abs(metrics['group_0_rmse'] - metrics['group_1_rmse']):.3f}\n"
+            # MAE比較
+            fairness += f"  - MAE - Group 0: {metrics['group_0_mae']:.3f}, Group 1: {metrics['group_1_mae']:.3f}\n"
+            fairness += f"  - MAE Difference: {abs(metrics['group_0_mae'] - metrics['group_1_mae']):.3f}\n"
+            # R2比較
+            fairness += f"  - R² Score - Group 0: {metrics['group_0_r2']:.3f}, Group 1: {metrics['group_1_r2']:.3f}\n"
+            # 殘差分析
+            fairness += "* Residuals Analysis:\n"
+            fairness += f"  - Mean Residuals - Group 0: {metrics['group_0_residuals_mean']:.3f}, Group 1: {metrics['group_1_residuals_mean']:.3f}\n"
+            fairness += f"  - Std Residuals - Group 0: {metrics['group_0_residuals_std']:.3f}, Group 1: {metrics['group_1_residuals_std']:.3f}\n"
     
     return fairness
 
-def format_quality_metrics(quality_metrics):
+def format_quality_metrics(quality_metrics, target_type='classification'):
     """Format model performance summary section"""
     summary = "\n3. Model Performance Summary\n"
     
-    # Main performance metrics
-    summary += "Basic Metrics:\n"
-    summary += f"* Overall Accuracy: {quality_metrics['準確率']*100:.2f}%\n"
-    summary += f"* Precision: {quality_metrics['精確率']*100:.2f}%\n"
-    summary += f"* Recall: {quality_metrics['召回率']*100:.2f}%\n"
-    summary += f"* F1 Score: {quality_metrics['F1分數']*100:.2f}%\n\n"
+    if target_type == 'classification':
+        # 分類指標
+        summary += "Basic Metrics:\n"
+        summary += f"* Overall Accuracy: {quality_metrics['準確率']*100:.2f}%\n"
+        summary += f"* Precision: {quality_metrics['精確率']*100:.2f}%\n"
+        summary += f"* Recall: {quality_metrics['召回率']*100:.2f}%\n"
+        summary += f"* F1 Score: {quality_metrics['F1分數']*100:.2f}%\n\n"
+        
+        # 混淆矩陣
+        conf_matrix = quality_metrics['confusion_matrix']
+        summary += "\nConfusion Matrix:\n"
+        summary += f"* True Positive: {conf_matrix['true_positive']:,}\n"
+        summary += f"* True Negative: {conf_matrix['true_negative']:,}\n"
+        summary += f"* False Positive: {conf_matrix['false_positive']:,}\n"
+        summary += f"* False Negative: {conf_matrix['false_negative']:,}\n"
+    else:
+        # 回歸指標
+        summary += "Regression Metrics:\n"
+        summary += f"* Mean Squared Error (MSE): {quality_metrics['MSE (均方誤差)']:.3f}\n"
+        summary += f"* Root Mean Squared Error (RMSE): {quality_metrics['RMSE (均方根誤差)']:.3f}\n"
+        summary += f"* Mean Absolute Error (MAE): {quality_metrics['MAE (平均絕對誤差)']:.3f}\n"
+        summary += f"* R² Score: {quality_metrics['R2 (決定係數)']:.3f}\n"
+        summary += f"* Adjusted R²: {quality_metrics['Adjusted R2 (調整後決定係數)']:.3f}\n\n"
     
     # Feature importance (Top 10)
-    summary += "Feature Importance (Top 10):\n"
-    sorted_features = sorted(quality_metrics['特徵重要性'].items(), key=lambda x: x[1], reverse=True)[:10]
-    for i, (feature, importance) in enumerate(sorted_features, 1):
-        summary += f"{i}. {feature}: {importance}\n"
-    
-    # Confusion matrix
-    conf_matrix = quality_metrics['confusion_matrix']
-    summary += "\nConfusion Matrix:\n"
-    summary += f"* True Positive: {conf_matrix['true_positive']:,}\n"
-    summary += f"* True Negative: {conf_matrix['true_negative']:,}\n"
-    summary += f"* False Positive: {conf_matrix['false_positive']:,}\n"
-    summary += f"* False Negative: {conf_matrix['false_negative']:,}\n"
+    if '特徵重要性' in quality_metrics:
+        summary += "Feature Importance (Top 10):\n"
+        sorted_features = sorted(quality_metrics['特徵重要性'].items(), key=lambda x: x[1], reverse=True)[:10]
+        for i, (feature, importance) in enumerate(sorted_features, 1):
+            summary += f"{i}. {feature}: {importance:.4f}\n"
     
     return summary
 
@@ -240,52 +331,42 @@ def format_drift_analysis(drift_metrics):
     return drift_text
 
 def call_gpt_api(model_type, metrics_text):
-    
     load_dotenv()
     
     """Call GPT API to generate action plan based on metrics text."""
-    # Configure OpenAI client
-    client = openai.OpenAI(
-        api_key=os.getenv("OPENAI_API_KEY")
-    )
+    client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    # Define ChatGPT request parameters
     messages = [
         {"role": "system", "content": "You are a professional data analysis consultant, skilled at proposing action plans to improve machine learning models."},
         {"role": "user", "content": f"Below are the model's explanation results, fairness assessment, performance summary, and data drift analysis. I used the {model_type} method for training. Please generate recommended action plans based on this information:\n\n{metrics_text}\n\nPlease output recommended action plans in a clear and organized manner, with clear items, focusing on improving model fairness, performance, and addressing data drift."}
     ]
 
-    # Call GPT model
     response = client.chat.completions.create(
-        model="gpt-4o",  # Update to correct model name
+        model="gpt-4",
         messages=messages,
         temperature=0.7,
         max_tokens=5000
     )
 
-    # Return generated text
     return response.choices[0].message.content.strip()
 
-def generate_report(model_type, explanation_results, fairness_metrics, quality_metrics, drift_metrics):
-    """Prepare metrics data for GPT API"""
-    # Integrate all metrics
+def generate_report(model_type, explanation_results, fairness_metrics, quality_metrics, drift_metrics, target_type='classification'):
+    """Generate comprehensive model analysis report"""
     metrics_text = ""
 
     if explanation_results:
-        metrics_text += format_explanation(explanation_results)
-        explanation = format_explanation(explanation_results)
+        metrics_text += format_explanation(explanation_results, target_type)
+        explanation = format_explanation(explanation_results, target_type)
     if fairness_metrics:
-        metrics_text += format_fairness_analysis(fairness_metrics)
-        fairness = format_fairness_analysis(fairness_metrics)
+        metrics_text += format_fairness_analysis(fairness_metrics, target_type)
+        fairness = format_fairness_analysis(fairness_metrics, target_type)
     if quality_metrics:
-        metrics_text += format_quality_metrics(quality_metrics)
-        quality = format_quality_metrics(quality_metrics)
+        metrics_text += format_quality_metrics(quality_metrics, target_type)
+        quality = format_quality_metrics(quality_metrics, target_type)
     if drift_metrics:
         metrics_text += format_drift_analysis(drift_metrics)
         drift = format_drift_analysis(drift_metrics)
 
     improve = call_gpt_api(model_type, metrics_text)
-
-    # metrics_text += call_gpt_api(model_type, metrics_text)
     
     return explanation, fairness, quality, drift, improve
