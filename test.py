@@ -81,24 +81,44 @@ def first_page():
 
     def on_target_change(*args):
         if selected_target.get() == "classification":
-            threshold_dropdown.config(state="normal")
+            target_value_entry.config(state="normal")
         else:
-            threshold_dropdown.config(state="disabled")
+            target_value_entry.config(state="disabled")
             selected_value.set(target_values[0])  # Reset the threshold selection
+
+    def update_protected_attributes():
+        # Clear previous widgets in right_frame2
+        for widget in right_frame2.winfo_children():
+            widget.destroy()
+
+        if fairness_check.get():  # If Fairness Check is selected
+            tk.Label(right_frame2, text="Protected Attributes", font=("Arial", 12, "bold"), bg="#f0f0f0").pack(anchor="center", pady=5)
+
+            if train_data is not None:
+                feature_names = list(train_data.columns)
+                for feature in feature_names:
+                    var = tk.BooleanVar(value=False)  # Default to not selected
+                    tk.Checkbutton(right_frame2, text=feature, variable=var, bg="#f0f0f0").pack(anchor="w", padx=10, pady=5)
 
     # Left and right frames
     left_frame = tk.Frame(root, height=400, width=600, bg="#f0f0f0")
-    right_frame = tk.Frame(root, height=800, width=600, bg="#ffffff")
+    right_frame = tk.Frame(root, height=800, width=300, bg="#ffffff")
     left_bottom_frame = tk.Frame(root, height=400, width=600, bg="#d0d0d0")  # New frame below left_frame
+    right_frame2 = tk.Frame(root, height=800, width=300, bg="#f0f0f0")
 
+    
+    right_frame2.pack(side="right", fill="both", padx=10, pady=10)
     right_frame.pack(side="right", fill="both", padx=10, pady=10)
     left_frame.pack(side="top", fill="both", padx=10, pady=10)
     left_bottom_frame.pack(side="bottom", fill="both", padx=10, pady=10)  # Bottom frame packed below left_frame
 
+
+    
     # Prevent frames from resizing
     left_frame.pack_propagate(False)
     right_frame.pack_propagate(False)
     left_bottom_frame.pack_propagate(False)
+    right_frame2.pack_propagate(False)
 
 
     # Left frame content
@@ -119,16 +139,31 @@ def first_page():
     model_type_dropdown.pack(anchor="center", pady=5)
     selected_model.set(model_types[0])
 
+    #Select  target types
     tk.Label(left_frame, text="Choose target types:", bg="#f0f0f0").pack(anchor="center", pady=5)
     model_dropdown = tk.OptionMenu(left_frame, selected_target, *target_types)
     model_dropdown.pack(anchor="center", pady=5)
     selected_target.set(target_types[0])
 
-    tk.Label(left_frame, text="Choose target value:", bg="#f0f0f0").pack(anchor="center", pady=5)
-    threshold_dropdown = tk.OptionMenu(left_frame, selected_value, *target_values)
-    threshold_dropdown.config(state="normal")  # Initially disabled
-    threshold_dropdown.pack(anchor="center", pady=5)
+
+    #Enter target value
+    tk.Label(left_frame, text="Enter target value:", bg="#f0f0f0").pack(anchor="center", pady=5)
+    '''
+    target_value_dropdown = tk.OptionMenu(left_frame, selected_value, *target_values)
+    target_value_dropdown.config(state="normal")  # Initially disabled
+    target_value_dropdown.pack(anchor="center", pady=5)
     selected_value.set(target_values[0])
+    '''
+    def validate(P):
+        #print(P)
+        if str.isdigit(P) or P == '':
+            return True
+        else:
+            return False
+    vcmd = (root.register(validate), '%P')
+    target_value_entry = tk.Entry(left_frame, text = "target value", validate='key', validatecommand=vcmd)
+    target_value_entry.pack(anchor="center", pady=5)
+
     # Bind target change event
     selected_target.trace("w", on_target_change)
 
@@ -148,63 +183,19 @@ def first_page():
     tk.Checkbutton(left_bottom_frame, text="Fairness Check", variable=fairness_check, bg="#d0d0d0").pack(anchor="w", padx=10, pady=5)
     tk.Checkbutton(left_bottom_frame, text="Drift Check", variable=drift_check, bg="#d0d0d0").pack(anchor="w", padx=10, pady=5)
 
+    fairness_check.trace("w", lambda *args: update_protected_attributes())
+
     # Right frame content
     tk.Label(right_frame, text="Features", font=("Arial", 12, "bold"), bg="#ffffff").pack(anchor="center", pady=5)
-
     # Bottom confirm button
     btn_confirm = tk.Button(left_frame, text="Confirm selection", command=confirm_selection, width=15)
     btn_confirm.pack(side="bottom", anchor="e", pady=15)
 
+    tk.Label(right_frame2, text="Protected attributes", font=("Arial", 12, "bold"), bg="#ffffff").pack(anchor="center", pady=5)
+
     # Main loop
-    root.mainloop()
-
-def second_page():
-    # Create window
-    root = tk.Tk()
-    root.title("Explainability Methods Checklist")
-
-     # Set window size
-    window_width = 1200
-    window_height = 800
-    screen_width = root.winfo_screenwidth()
-    screen_height = root.winfo_screenheight()
-    x_offset = int((screen_width - window_width) / 2)
-    y_offset = int((screen_height - window_height) / 2)
-    root.geometry(f"{window_width}x{window_height}+{x_offset}+{y_offset}")
-
-    # Initialize variables for checkboxes
-    lime = tk.BooleanVar(value=False)
-    shap = tk.BooleanVar(value=False)
-    quality_check = tk.BooleanVar(value=False)
-    fairness_check = tk.BooleanVar(value=False)
-    drift_check = tk.BooleanVar(value=False)
-
-    # Function to display the current selections
-    def display_selection():
-        selections = [
-            f"LIME: {lime.get()}",
-            f"SHAP: {shap.get()}",
-            f"Quality Check: {quality_check.get()}",
-            f"Fairness Check: {fairness_check.get()}",
-            f"Drift Check: {drift_check.get()}"
-        ]
-        # Show selected options
-        print("\n".join(selections))
-
-    # Create Checkbuttons for each element
-    tk.Checkbutton(root, text="LIME", variable=lime).pack(anchor="w")
-    tk.Checkbutton(root, text="SHAP", variable=shap).pack(anchor="w")
-    tk.Checkbutton(root, text="Quality Check", variable=quality_check).pack(anchor="w")
-    tk.Checkbutton(root, text="Fairness Check", variable=fairness_check).pack(anchor="w")
-    tk.Checkbutton(root, text="Drift Check", variable=drift_check).pack(anchor="w")
-
-    # Button to display current selections
-    #tk.Button(root, text="Display Selections", command=display_selection).pack(pady=10)
-
-    # Start the main loop
     root.mainloop()
 
 
 # Call the function to run the program
 first_page()
-#second_page()
