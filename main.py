@@ -16,14 +16,19 @@ def main():
 
     # User Choose Model
     model_path = 'data_model/churn/lgbm.joblib' #user choose
+    # model_path = 'data_model/diabetes/lgbm.joblib' #user choose
+
     model_type = 'rf or xgboost or lgbm' #user choose
 
     # Upload Train Data
     train_data = pd.read_csv('data_model/churn/train.csv')
     target_column = 'Tenure' #user choose
+    # train_data = pd.read_csv('data_model/diabetes/train.csv')
+    # target_column = 'Diabetes_binary' #user choose
     train_data = train_data.drop(target_column, axis=1)
     target_type = 'classification or regression' #user choose
     target_type = 'regression'
+    # target_type = 'classification'
     if target_type == 'classification':
         #user input two values
         target_values = [0, 1]
@@ -41,7 +46,7 @@ def main():
 
 
     # 儲存解釋結果
-    explanation_results = None
+    explaination_metrics = None
     quality_metrics = None
     fairness_metrics = None
     drift_metrics = None
@@ -105,7 +110,7 @@ def main():
     # Fairness Check
     if fairness_check:
         # 評估模型公平性
-        protected_attributes = ['Age', 'Gender']  # 可以加入多個保護屬性(user choose column)
+        protected_attributes = ['Age']  # 可以加入多個保護屬性(user choose column)
         fairness_metrics = fairness.assess_fairness(
             model_path=model_path,
             test_data=test_data,
@@ -126,7 +131,7 @@ def main():
 
     # Drift Check
     if drift_check:
-        # 由於 train_data 已經刪除了目標欄位，我們可以直接使用它
+
         reference_data = train_data
         current_data = test_data.drop(columns=[target_column])
         

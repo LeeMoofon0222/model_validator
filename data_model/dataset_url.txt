@@ -1,5 +1,5 @@
 Diabetes Health Indicators Dataset: https://www.kaggle.com/datasets/alexteboul/diabetes-health-indicators-dataset
 
-Credit card approval: https://www.kaggle.com/datasets/samuelcortinhas/credit-card-approval-clean-data
+Customer Churn Dataset: https://www.kaggle.com/datasets/muhammadshahidazeem/customer-churn-dataset
 
 income: https://www.kaggle.com/datasets/uciml/adult-census-income

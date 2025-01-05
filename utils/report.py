@@ -230,38 +230,97 @@ def format_explanation(explanation_results, target_type='classification'):
     return explanation
 
 def format_fairness_analysis(fairness_metrics, target_type='classification'):
-    """Format fairness analysis section"""
+    """Format fairness analysis section with safe handling of metrics
+    
+    Parameters:
+    -----------
+    fairness_metrics : dict
+        公平性指標字典
+    target_type : str
+        'classification' 或 'regression'
+    """
     fairness = "\n2. Model Fairness Assessment\n"
     
+    if not fairness_metrics or 'group_metrics' not in fairness_metrics:
+        return fairness + "\nNo fairness metrics available.\n"
+        
     # Process each protected attribute
     for attribute, metrics in fairness_metrics['group_metrics'].items():
         fairness += f"\n{attribute} Analysis\n"
         
-        # 基本群組資訊
-        fairness += f"* Group Sample Size - Group 0: {metrics['group_0_size']}, Group 1: {metrics['group_1_size']}\n"
-        
-        if target_type == 'classification':
-            # 分類指標
-            fairness += f"* Accuracy Difference: {metrics['accuracy_difference']*100:.2f}% "
-            fairness += f"(Group 0: {metrics['group_0_accuracy']*100:.2f}%, "
-            fairness += f"Group 1: {metrics['group_1_accuracy']*100:.2f}%)\n"
-            fairness += f"* Precision - Group 0: {metrics['group_0_precision']*100:.2f}%, Group 1: {metrics['group_1_precision']*100:.2f}%\n"
-            fairness += f"* Recall - Group 0: {metrics['group_0_recall']*100:.2f}%, Group 1: {metrics['group_1_recall']*100:.2f}%\n"
-        else:
-            # 回歸指標
-            fairness += "* Performance Metrics:\n"
-            # RMSE比較
-            fairness += f"  - RMSE - Group 0: {metrics['group_0_rmse']:.3f}, Group 1: {metrics['group_1_rmse']:.3f}\n"
-            fairness += f"  - RMSE Difference: {abs(metrics['group_0_rmse'] - metrics['group_1_rmse']):.3f}\n"
-            # MAE比較
-            fairness += f"  - MAE - Group 0: {metrics['group_0_mae']:.3f}, Group 1: {metrics['group_1_mae']:.3f}\n"
-            fairness += f"  - MAE Difference: {abs(metrics['group_0_mae'] - metrics['group_1_mae']):.3f}\n"
-            # R2比較
-            fairness += f"  - R² Score - Group 0: {metrics['group_0_r2']:.3f}, Group 1: {metrics['group_1_r2']:.3f}\n"
-            # 殘差分析
-            fairness += "* Residuals Analysis:\n"
-            fairness += f"  - Mean Residuals - Group 0: {metrics['group_0_residuals_mean']:.3f}, Group 1: {metrics['group_1_residuals_mean']:.3f}\n"
-            fairness += f"  - Std Residuals - Group 0: {metrics['group_0_residuals_std']:.3f}, Group 1: {metrics['group_1_residuals_std']:.3f}\n"
+        try:
+            # 基本群組資訊
+            group_0_size = metrics.get('group_0_size', 0)
+            group_1_size = metrics.get('group_1_size', 0)
+            fairness += f"* Group Sample Size - Group 0: {group_0_size}, Group 1: {group_1_size}\n"
+            
+            if target_type == 'classification':
+                # 安全地獲取分類指標
+                # 準確率差異
+                if 'accuracy_difference' in metrics:
+                    acc_diff = metrics['accuracy_difference'] * 100
+                    group_0_acc = metrics.get('group_0_accuracy', 0) * 100
+                    group_1_acc = metrics.get('group_1_accuracy', 0) * 100
+                    fairness += f"* Accuracy Difference: {acc_diff:.2f}% "
+                    fairness += f"(Group 0: {group_0_acc:.2f}%, "
+                    fairness += f"Group 1: {group_1_acc:.2f}%)\n"
+                
+                # 精確率
+                if all(k in metrics for k in ['group_0_precision', 'group_1_precision']):
+                    g0_prec = metrics['group_0_precision'] * 100
+                    g1_prec = metrics['group_1_precision'] * 100
+                    fairness += f"* Precision - Group 0: {g0_prec:.2f}%, Group 1: {g1_prec:.2f}%\n"
+                
+                # 召回率
+                if all(k in metrics for k in ['group_0_recall', 'group_1_recall']):
+                    g0_rec = metrics['group_0_recall'] * 100
+                    g1_rec = metrics['group_1_recall'] * 100
+                    fairness += f"* Recall - Group 0: {g0_rec:.2f}%, Group 1: {g1_rec:.2f}%\n"
+                
+                # 特異度
+                if all(k in metrics for k in ['group_0_specificity', 'group_1_specificity']):
+                    g0_spec = metrics['group_0_specificity'] * 100
+                    g1_spec = metrics['group_1_specificity'] * 100
+                    fairness += f"* Specificity - Group 0: {g0_spec:.2f}%, Group 1: {g1_spec:.2f}%\n"
+                
+            else:  # regression
+                # 安全地獲取回歸指標
+                # RMSE
+                if all(k in metrics for k in ['group_0_rmse', 'group_1_rmse']):
+                    fairness += "* RMSE Comparison:\n"
+                    fairness += f"  - Group 0: {metrics['group_0_rmse']:.3f}\n"
+                    fairness += f"  - Group 1: {metrics['group_1_rmse']:.3f}\n"
+                    if 'rmse_difference' in metrics:
+                        fairness += f"  - Difference: {metrics['rmse_difference']:.3f}\n"
+                
+                # MAE
+                if all(k in metrics for k in ['group_0_mae', 'group_1_mae']):
+                    fairness += "* MAE Comparison:\n"
+                    fairness += f"  - Group 0: {metrics['group_0_mae']:.3f}\n"
+                    fairness += f"  - Group 1: {metrics['group_1_mae']:.3f}\n"
+                    if 'mae_difference' in metrics:
+                        fairness += f"  - Difference: {metrics['mae_difference']:.3f}\n"
+                
+                # R²
+                if all(k in metrics for k in ['group_0_r2', 'group_1_r2']):
+                    fairness += "* R² Score Comparison:\n"
+                    fairness += f"  - Group 0: {metrics['group_0_r2']:.3f}\n"
+                    fairness += f"  - Group 1: {metrics['group_1_r2']:.3f}\n"
+                    if 'r2_difference' in metrics:
+                        fairness += f"  - Difference: {metrics['r2_difference']:.3f}\n"
+                
+                # 殘差分析
+                if all(k in metrics for k in ['group_0_residuals_mean', 'group_1_residuals_mean']):
+                    fairness += "* Residuals Analysis:\n"
+                    fairness += f"  - Mean Residuals - Group 0: {metrics['group_0_residuals_mean']:.3f}\n"
+                    fairness += f"  - Mean Residuals - Group 1: {metrics['group_1_residuals_mean']:.3f}\n"
+                    if all(k in metrics for k in ['group_0_residuals_std', 'group_1_residuals_std']):
+                        fairness += f"  - Std Residuals - Group 0: {metrics['group_0_residuals_std']:.3f}\n"
+                        fairness += f"  - Std Residuals - Group 1: {metrics['group_1_residuals_std']:.3f}\n"
+                
+        except Exception as e:
+            fairness += f"Error processing metrics for {attribute}: {str(e)}\n"
+            continue
     
     return fairness
 
