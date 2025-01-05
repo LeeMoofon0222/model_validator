@@ -154,11 +154,109 @@ def evaluate_model(y_pred, y_true, save_path=None):
     }
 
 
+def train_regression_model(X_train, y_train, X_test, y_test, model_type='rf', params=None):
+    """
+    訓練回歸模型並返回預測結果
+    model_type: 'rf'(RandomForest), 'xgb'(XGBoost), 'lgbm'(LightGBM)
+    """
+    from sklearn.ensemble import RandomForestRegressor
+    from xgboost import XGBRegressor
+    from lightgbm import LGBMRegressor
+    from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+    
+    # 默認參數
+    default_params = {
+        'rf': {
+            'n_estimators': 100,
+            'max_depth': 10,
+            'random_state': 42
+        },
+        'xgb': {
+            'n_estimators': 100,
+            'max_depth': 6,
+            'learning_rate': 0.1,
+            'random_state': 42
+        },
+        'lgbm': {
+            'n_estimators': 100,
+            'num_leaves': 31,
+            'random_state': 42
+        }
+    }
+
+    model_params = params if params else default_params[model_type]
+
+    # 選擇回歸模型
+    models = {
+        'rf': RandomForestRegressor,
+        'xgb': XGBRegressor,
+        'lgbm': LGBMRegressor
+    }
+
+    # 訓練模型
+    model = models[model_type](**model_params)
+    model.fit(X_train, y_train)
+    
+    # 預測
+    y_pred = model.predict(X_test)
+    
+    # 評估
+    metrics = evaluate_regression_model(y_pred, y_test)
+    
+    return {
+        'model': model,
+        'predictions': y_pred,
+        'metrics': metrics
+    }
+
+
+def evaluate_regression_model(y_pred, y_true, save_path=None):
+    """評估回歸模型表現"""
+    from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    
+    mse = mean_squared_error(y_true, y_pred)
+    rmse = np.sqrt(mse)
+    mae = mean_absolute_error(y_true, y_pred)
+    r2 = r2_score(y_true, y_pred)
+    
+    # 繪製預測值vs實際值的散點圖
+    plt.figure(figsize=(8, 6))
+    plt.scatter(y_true, y_pred, alpha=0.5)
+    plt.plot([y_true.min(), y_true.max()], [y_true.min(), y_true.max()], 'r--', lw=2)
+    plt.xlabel('Actual Values')
+    plt.ylabel('Predicted Values')
+    plt.title('Prediction vs Actual')
+    
+    if save_path:
+        plt.savefig(f'{save_path}_pred_vs_actual.png')
+    plt.close()
+    
+    # 繪製殘差圖
+    residuals = y_true - y_pred
+    plt.figure(figsize=(8, 6))
+    sns.histplot(residuals, kde=True)
+    plt.xlabel('Residuals')
+    plt.ylabel('Count')
+    plt.title('Residuals Distribution')
+    
+    if save_path:
+        plt.savefig(f'{save_path}_residuals.png')
+    plt.close()
+    
+    return {
+        'mse': mse,
+        'rmse': rmse,
+        'mae': mae,
+        'r2': r2
+    }
 
 # 使用範例
 if __name__ == "__main__":
     # 讀取資料
-    data = pd.read_csv('data_model/diabetes/origin.csv')
+    data = pd.read_csv('data_model/churn/train_for_test.csv')
     data = data.astype(int)
     # # 數據預處理
     # data = process_data(data, categorical_columns=['col1', 'col2'], target_column='target')
@@ -170,22 +268,22 @@ if __name__ == "__main__":
     # data = create_sample(data, target_column='target', sample_size=5000)
     
     # 分割資料
-    X_train, X_test, y_train, y_test = split_data(data, target_column='Diabetes_binary')
+    X_train, X_test, y_train, y_test = split_data(data, target_column='Tenure')
 
 
     # 使用隨機森林
-    # results = train_model(X_train, y_train, X_test, y_test, model_type='rf')
+    # results = train_regression_model(X_train, y_train, X_test, y_test, model_type='rf')
     
     # 使用XGBoost，自定義參數
-    # custom_params = {'n_estimators': 300, 'max_depth': 6, 'learning_rate': 0.05}
-    # results = train_model(X_train, y_train, X_test, y_test, model_type='xgb', params=custom_params)
+    custom_params = {'n_estimators': 300, 'max_depth': 6, 'learning_rate': 0.05}
+    results = train_regression_model(X_train, y_train, X_test, y_test, model_type='xgb', params=custom_params)
     
     # 使用LightGBM
-    results = train_model(X_train, y_train, X_test, y_test, model_type='lgbm')
+    # results = train_regression_model(X_train, y_train, X_test, y_test, model_type='lgbm')
 
 
 
-    joblib.dump(results['model'], 'lgbm.joblib')
+    joblib.dump(results['model'], 'xgb.joblib')
 
 
     # loaded_model = joblib.load('diabetes_model_rf.joblib')  # 載入模型

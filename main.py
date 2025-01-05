@@ -1,15 +1,18 @@
-from utils import explain, fairness, quality, drift
+from utils import explain, fairness, quality, drift, report
 import pandas as pd
 import joblib
 from lime.lime_tabular import LimeTabularExplainer
 import shap
 import numpy as np
 
+
+
+
+
 def main():
 
     # -------------------------------------------------First Page-------------------------------------------------
     
-
 
     # User Choose Model
     model_path = 'data_model/diabetes/lgbm.joblib'
@@ -18,7 +21,7 @@ def main():
     # Upload Train Data
     train_data = pd.read_csv('data_model/diabetes/train.csv')
     train_data = train_data.drop('Diabetes_binary', axis=1)
-    target_type = 'classification or numeric' #user choose
+    target_type = 'classification or regression' #user choose
     target_type = 'classification'
     if target_type == 'classification':
         #user input two values
@@ -58,7 +61,7 @@ def main():
         # 初始化 LIME 解釋器
         
         # 獲取 LIME 解釋
-        explanation_results = explain.explain_prediction_lime(
+        explaination_metrics = explain.explain_prediction_lime(
             model_path=model_path,
             sample=sample,
             train_data=train_data,
@@ -69,7 +72,7 @@ def main():
         
     elif shap:
         # 獲取 SHAP 解釋
-        explanation_results = explain.explain_prediction_shap(
+        explaination_metrics = explain.explain_prediction_shap(
             model_path=model_path,
             sample=sample,
             feature_names=feature_names
@@ -87,12 +90,11 @@ def main():
         )
         
         # 獲取混淆矩陣
-        confusion_matrix = quality.get_confusion_matrix(
+        quality_metrics['confusion_matrix'] = quality.get_confusion_matrix(
             model_path=model_path,
             test_data=test_data.drop(columns=[target]),
             test_labels=test_data[target]
         )
-        quality_metrics['confusion_matrix'] = confusion_matrix
 
 
     # Fairness Check
@@ -107,13 +109,12 @@ def main():
         )
         
         # 獲取群組指標
-        group_metrics = fairness.get_group_metrics(
+        fairness_metrics['group_metrics'] = fairness.get_group_metrics(
             model_path=model_path,
             test_data=test_data,
             protected_attributes=protected_attributes,
             target_column=target
         )
-        fairness_metrics['group_metrics'] = group_metrics
 
 
     # Drift Check
@@ -148,19 +149,15 @@ def main():
 
 
     # Generate Form
-    # 這裡可以根據不同的分析結果生成報告
-    results = {
-        'explanation': explanation_results,
-        'quality': quality_metrics,
-        'fairness': fairness_metrics,
-        'drift': drift_metrics
-    }
-    
-    # 輸出結果
-    for analysis_type, result in results.items():
-        if result:
-            print(f"\n{analysis_type.upper()} 分析結果:")
-            print(result)
+    explanation_result, fairness_result, quality_result, drift_result, improve_result = report.generate_report(
+        model_type=model_type,
+        explanation_results=explaination_metrics,
+        fairness_metrics=fairness_metrics,
+        quality_metrics=quality_metrics,
+        drift_metrics=drift_metrics
+    )
+
+    print(explanation_result, fairness_result, quality_result, drift_result, improve_result)
 
 if __name__ == "__main__":
     main()
