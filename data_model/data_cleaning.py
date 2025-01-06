@@ -1,300 +1,93 @@
 import pandas as pd
 import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
 from sklearn.preprocessing import OrdinalEncoder
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from xgboost import XGBClassifier
-from lightgbm import LGBMClassifier
-from sklearn.metrics import accuracy_score, confusion_matrix, roc_curve, auc, f1_score
-import joblib
-import json
-from datetime import datetime
 
+# 讀取數據
+df = pd.read_csv('data_model/income/origin.csv')
 
+# 1. 處理缺失值
+df = df[~df.isin(['?']).any(axis=1)]
 
+# 2. 定義數值特徵
+numerical_features = ['age', 'fnlwgt', 'education.num', 'capital.gain', 
+                     'capital.loss', 'hours.per.week']
 
-def process_data(data, categorical_columns, target_column):
-    """類別編碼和資料平衡"""
-    for col in categorical_columns:
-        if col in data.columns:
-            unique_values = sorted(data[col].unique())
-            encoder = OrdinalEncoder(categories=[unique_values])
-            data[[col]] = encoder.fit_transform(data[[col]])
-            data[col] = data[col].astype(int)
-    
-    grouped = data.groupby(target_column)
-    return grouped.apply(lambda x: x.sample(grouped.size().min())).reset_index(drop=True)
+# 3. 將類別特徵轉換為二元特徵
+# Native country: US vs non-US
+df['is_US'] = (df['native.country'] == 'United-States').astype(int)
 
+# Race: Black vs White (移除其他種族)
+df = df[df['race'].isin(['White', 'Black'])]
+df['is_White'] = (df['race'] == 'White').astype(int)
 
-def handle_outliers(data, numeric_columns):
-    """處理離散值"""
-    for column in numeric_columns:
-        if column in data.columns:
-            Q1 = data[column].quantile(0.25)
-            Q3 = data[column].quantile(0.75)
-            IQR = Q3 - Q1
-            data = data[(data[column] >= Q1 - 1.5 * IQR) & (data[column] <= Q3 + 1.5 * IQR)]
-    return data
+# Sex: Female vs Male
+df['is_Male'] = (df['sex'] == 'Male').astype(int)
 
+# 4. 定義 Ordinal Encoding 特徵及其順序
+ordinal_mappings = {
+    'education': [
+        'Preschool', '1st-4th', '5th-6th', '7th-8th', '9th', '10th', '11th', '12th',
+        'HS-grad', 'Some-college', 'Assoc-voc', 'Assoc-acdm', 'Bachelors', 'Masters',
+        'Prof-school', 'Doctorate'
+    ],
+    'occupation': [
+        'Other-service', 'Handlers-cleaners', 'Machine-op-inspct', 'Adm-clerical',
+        'Farming-fishing', 'Transport-moving', 'Priv-house-serv', 'Protective-serv',
+        'Armed-Forces', 'Tech-support', 'Craft-repair', 'Sales', 'Exec-managerial',
+        'Prof-specialty'
+    ],
+    'marital.status': [
+        'Never-married', 'Married-spouse-absent', 'Separated', 'Divorced',
+        'Widowed', 'Married-civ-spouse', 'Married-AF-spouse'
+    ]
+}
 
-def create_sample(data, target_column, sample_size):
-    """創建平衡樣本"""
-    df_0 = data[data[target_column] == 0].sample(n=sample_size, random_state=42)
-    df_1 = data[data[target_column] == 1].sample(n=sample_size, random_state=42)
-    return pd.concat([df_0, df_1]).sample(frac=1, random_state=42).reset_index(drop=True)
+# 5. 應用 Ordinal Encoding
+for column, categories in ordinal_mappings.items():
+    if column in df.columns:
+        encoder = OrdinalEncoder(categories=[categories])
+        df[column] = encoder.fit_transform(df[[column]])
 
+# 6. 移除不需要的列
+columns_to_drop = ['workclass', 'relationship', 'race', 'sex', 'native.country']
+df = df.drop(columns_to_drop, axis=1)
 
-def split_data(data, target_column, test_size=0.2):
-    """分割訓練和測試集，並保存"""
-    X = data.drop(target_column, axis=1)
-    y = data[target_column]
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
-    
-    # 合併特徵和標籤
-    train_data = pd.concat([X_train, y_train], axis=1)
-    test_data = pd.concat([X_test, y_test], axis=1)
-    
-    # 保存訓練集和測試集
-    train_data.to_csv('train.csv', index=False)
-    test_data.to_csv('test.csv', index=False)
-    
-    return X_train, X_test, y_train, y_test
+# 7. 處理目標變量
+df['income'] = df['income'].map({'>50K': 1, '<=50K': 0})
 
+# 8. 轉換所有特徵為整數類型
+df = df.astype(int)
 
-def train_model(X_train, y_train, X_test, y_test, model_type='rf', params=None):
-    """
-    訓練模型並返回預測結果
-    model_type: 'rf'(RandomForest), 'xgb'(XGBoost), 'lgbm'(LightGBM)
-    """
-    # 默認參數
-    default_params = {
-        'rf': {
-            'n_estimators': 100,
-            'max_depth': 10,
-            'random_state': 42
-        },
-        'xgb': {
-            'n_estimators': 100,
-            'max_depth': 6,
-            'learning_rate': 0.1,
-            'random_state': 42
-        },
-        'lgbm': {
-            'n_estimators': 100,
-            'num_leaves': 31,
-            'random_state': 42
-        }
-    }
+# 9. 資料平衡
+# 計算兩個類別的樣本數
+n_income_0 = len(df[df['income'] == 0])
+n_income_1 = len(df[df['income'] == 1])
+min_samples = min(n_income_0, n_income_1)
 
-    model_params = params if params else default_params[model_type]
+# 從每個類別中隨機抽樣相同數量的樣本
+df_income_0 = df[df['income'] == 0].sample(n=min_samples, random_state=42)
+df_income_1 = df[df['income'] == 1].sample(n=min_samples, random_state=42)
 
-    # 選擇模型
-    models = {
-        'rf': RandomForestClassifier,
-        'xgb': XGBClassifier,
-        'lgbm': LGBMClassifier
-    }
+# 合併平衡後的數據
+df_balanced = pd.concat([df_income_0, df_income_1])
 
-    # 訓練模型
-    model = models[model_type](**model_params)
-    model.fit(X_train, y_train)
-    
-    # 預測
-    y_pred = model.predict(X_test)
-    y_pred_proba = model.predict_proba(X_test)[:, 1]
-    
-    # 評估
-    metrics = evaluate_model(y_pred, y_test)
-    
-    return {
-        'model': model,
-        'predictions': y_pred,
-        'probabilities': y_pred_proba,
-        'metrics': metrics
-    }
+# 打亂數據順序
+df_balanced = df_balanced.sample(frac=1, random_state=42).reset_index(drop=True)
 
+# 顯示平衡後的數據基本信息
+print("\n數據預處理和平衡後的基本信息：")
+print(f"資料筆數: {len(df_balanced)}")
+print(f"特徵數量: {len(df_balanced.columns)}")
+print("\n特徵列表：")
+print(df_balanced.columns.tolist())
+print("\n各類別的樣本數：")
+print(df_balanced['income'].value_counts())
+print("\n前五筆資料：")
+print(df_balanced.head())
 
-def evaluate_model(y_pred, y_true, save_path=None):
-    """評估模型表現"""
-    accuracy = accuracy_score(y_true, y_pred)
-    f1 = f1_score(y_true, y_pred)
-    conf_matrix = confusion_matrix(y_true, y_pred)
-    fpr, tpr, _ = roc_curve(y_true, y_pred, pos_label=1)
-    roc_auc = auc(fpr, tpr)
-    
-    plt.figure(figsize=(8, 6))
-    plt.plot(fpr, tpr, label=f'ROC (AUC = {roc_auc:.2f})')
-    plt.plot([0, 1], [0, 1], 'k--')
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title('ROC Curve')
-    plt.legend()
-    
-    if save_path:
-        plt.savefig(f'{save_path}_roc.png')
-    plt.close()
-    
-    plt.figure(figsize=(6, 4))
-    sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues')
-    plt.xlabel('Predicted')
-    plt.ylabel('Actual')
-    plt.title('Confusion Matrix')
-    
-    if save_path:
-        plt.savefig(f'{save_path}_conf_matrix.png')
-    plt.close()
-    
-    return {
-        'accuracy': accuracy,
-        'f1_score': f1,
-        'roc_auc': roc_auc,
-        'confusion_matrix': conf_matrix.tolist()
-    }
+# 顯示數值特徵的統計摘要
+print("\n數值特徵的統計摘要：")
+print(df_balanced[numerical_features].describe())
 
-
-def train_regression_model(X_train, y_train, X_test, y_test, model_type='rf', params=None):
-    """
-    訓練回歸模型並返回預測結果
-    model_type: 'rf'(RandomForest), 'xgb'(XGBoost), 'lgbm'(LightGBM)
-    """
-    from sklearn.ensemble import RandomForestRegressor
-    from xgboost import XGBRegressor
-    from lightgbm import LGBMRegressor
-    from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-    
-    # 默認參數
-    default_params = {
-        'rf': {
-            'n_estimators': 100,
-            'max_depth': 10,
-            'random_state': 42
-        },
-        'xgb': {
-            'n_estimators': 100,
-            'max_depth': 6,
-            'learning_rate': 0.1,
-            'random_state': 42
-        },
-        'lgbm': {
-            'n_estimators': 100,
-            'num_leaves': 31,
-            'random_state': 42
-        }
-    }
-
-    model_params = params if params else default_params[model_type]
-
-    # 選擇回歸模型
-    models = {
-        'rf': RandomForestRegressor,
-        'xgb': XGBRegressor,
-        'lgbm': LGBMRegressor
-    }
-
-    # 訓練模型
-    model = models[model_type](**model_params)
-    model.fit(X_train, y_train)
-    
-    # 預測
-    y_pred = model.predict(X_test)
-    
-    # 評估
-    metrics = evaluate_regression_model(y_pred, y_test)
-    
-    return {
-        'model': model,
-        'predictions': y_pred,
-        'metrics': metrics
-    }
-
-
-def evaluate_regression_model(y_pred, y_true, save_path=None):
-    """評估回歸模型表現"""
-    from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-    import numpy as np
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-    
-    mse = mean_squared_error(y_true, y_pred)
-    rmse = np.sqrt(mse)
-    mae = mean_absolute_error(y_true, y_pred)
-    r2 = r2_score(y_true, y_pred)
-    
-    # 繪製預測值vs實際值的散點圖
-    plt.figure(figsize=(8, 6))
-    plt.scatter(y_true, y_pred, alpha=0.5)
-    plt.plot([y_true.min(), y_true.max()], [y_true.min(), y_true.max()], 'r--', lw=2)
-    plt.xlabel('Actual Values')
-    plt.ylabel('Predicted Values')
-    plt.title('Prediction vs Actual')
-    
-    if save_path:
-        plt.savefig(f'{save_path}_pred_vs_actual.png')
-    plt.close()
-    
-    # 繪製殘差圖
-    residuals = y_true - y_pred
-    plt.figure(figsize=(8, 6))
-    sns.histplot(residuals, kde=True)
-    plt.xlabel('Residuals')
-    plt.ylabel('Count')
-    plt.title('Residuals Distribution')
-    
-    if save_path:
-        plt.savefig(f'{save_path}_residuals.png')
-    plt.close()
-    
-    return {
-        'mse': mse,
-        'rmse': rmse,
-        'mae': mae,
-        'r2': r2
-    }
-
-# 使用範例
-if __name__ == "__main__":
-    # 讀取資料
-    data = pd.read_csv('data_model/churn/train_for_test.csv')
-    data = data.astype(int)
-    # # 數據預處理
-    # data = process_data(data, categorical_columns=['col1', 'col2'], target_column='target')
-    
-    # # 處理異常值
-    # data = handle_outliers(data, numeric_columns=['col3', 'col4'])
-    
-    # # 創建平衡樣本
-    # data = create_sample(data, target_column='target', sample_size=5000)
-    
-    # 分割資料
-    X_train, X_test, y_train, y_test = split_data(data, target_column='Tenure')
-
-
-    # 使用隨機森林
-    # results = train_regression_model(X_train, y_train, X_test, y_test, model_type='rf')
-    
-    # 使用XGBoost，自定義參數
-    custom_params = {'n_estimators': 300, 'max_depth': 6, 'learning_rate': 0.05}
-    results = train_regression_model(X_train, y_train, X_test, y_test, model_type='xgb', params=custom_params)
-    
-    # 使用LightGBM
-    # results = train_regression_model(X_train, y_train, X_test, y_test, model_type='lgbm')
-
-
-
-    joblib.dump(results['model'], 'xgb.joblib')
-
-
-    # loaded_model = joblib.load('diabetes_model_rf.joblib')  # 載入模型
-    # if loaded_model:        
-    #     # 進行預測
-    #     y_pred = loaded_model.predict(X_test)
-
-    #     # 評估模型
-    #     metrics = evaluate_model(y_pred, y_test)
-
-    #     # 打印評估指標
-    #     print(f"Accuracy: {metrics['accuracy']:.4f}")
-    #     print(f"F1-Score: {metrics['f1_score']:.4f}")
-    #     print(f"ROC AUC: {metrics['roc_auc']:.4f}")
+# 保存處理後的數據
+df_balanced.to_csv('cleaned_data.csv', index=False)
