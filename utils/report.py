@@ -253,7 +253,7 @@ def call_gpt_api(model_type, metrics_text):
     client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
     messages = [
-        {"role": "system", "content": "你是一個專業的數據分析顧問，善於提出改進機器學習模型的行動方案。"},
+        {"role": "system", "content": "你是一個專業的數據分析顧問，善於提出改進機器學習模型的行動方案。並使用繁體中文回答"},
         {"role": "user", "content": f"以下是模型的解釋結果、公平性評估、性能摘要及數據漂移分析，我用的是{model_type}方法訓練，請根據這些資訊生成建議的行動方案：\n\n{metrics_text}\n\n請以條理清晰的方式輸出建議行動方案，條目清晰，並著重於提升模型公平性、性能和應對數據漂移。"}
     ]
 

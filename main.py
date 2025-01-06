@@ -206,26 +206,26 @@ def main():
                         )
                         
                         # Display Results
-                        st.header("分析報告")
+                        st.header("Analyze Results")
                         
                         # Use columns to organize content
                         col1, col2 = st.columns(2)
                         
                         with col1:
                             if explanation_result:
-                                st.markdown("### 🎯 模型解釋")
+                                st.markdown("### 🎯 Local Explanations")
                                 # Extract prediction probability
                                 if target_type == "classification":
                                     if "probability: [" in explanation_result:
                                         prob = [float(p) for p in explanation_result.split("probability: [")[1].split("]")[0].split()]
-                                        st.metric("預測機率", f"{prob[1]*100:.1f}%")
+                                        st.metric("Predicted Probability", f"{prob[1]*100:.1f}%")
                                 else:  # regression
                                     if "Predicted value:" in explanation_result:
                                         pred_value = float(explanation_result.split("Predicted value:")[1].split("\n")[0])
-                                        st.metric("預測值", f"{pred_value:.3f}")
+                                        st.metric("Predicted Value", f"{pred_value:.3f}")
                                 
                                 # Feature importance
-                                st.markdown("#### 主要影響因素")
+                                st.markdown("#### Main Features")
                                 for line in explanation_result.split("\n"):
                                     if ":" in line and ("+" in line or "-" in line):
                                         feature, impact = line.split(":")
@@ -235,7 +235,7 @@ def main():
                         
                         with col2:
                             if quality_result:
-                                st.markdown("### 📊 模型表現")
+                                st.markdown("### 📊 Model Performance")
                                 metrics = {}
                                 current_section = None
                                 
@@ -265,10 +265,10 @@ def main():
                                 if target_type == "classification":
                                     cols = st.columns(4)
                                     metrics_mapping = {
-                                        'Overall Accuracy': '準確率',
-                                        'F1 Score': 'F1分數',
-                                        'Precision': '精確率',
-                                        'Recall': '召回率'
+                                        'Overall Accuracy': 'Accuracy',
+                                        'F1 Score': 'F1 Score',
+                                        'Precision': 'Precision',
+                                        'Recall': 'Recall'
                                     }
                                     for i, (metric_name, display_name) in enumerate(metrics_mapping.items()):
                                         if metric_name in metrics:
@@ -283,24 +283,60 @@ def main():
                                     for i, (metric_name, display_name) in enumerate(metrics_mapping.items()):
                                         if metric_name in metrics:
                                             cols[i].metric(display_name, f"{metrics[metric_name]:.3f}")
+
+   
+                                # # Display Feature Importance
+                                if '特徵重要性' in quality_metrics:
+                                    st.markdown("#### Features Importance (Top 10)")
+                                    # Sort features by importance and get top 10
+                                    sorted_features = sorted(
+                                        quality_metrics['特徵重要性'].items(), 
+                                        key=lambda x: x[1], 
+                                        reverse=True
+                                    )[:10]
+                                    
+                                    # Create two columns
+                                    imp_col1, imp_col2 = st.columns(2)
+                                    
+                                    with imp_col1:
+                                        # Display feature importance as a formatted list
+                                        for i, (feature, importance) in enumerate(sorted_features, 1):
+                                            st.markdown(
+                                                f"{i}. **{feature}**: {importance:.4f}"
+                                            )
+                                            
+                                    
+                                    with imp_col2:
+                                        # Confusion Matrix visualization (only for classification)
+                                        if target_type == "classification" and quality_metrics and 'confusion_matrix' in quality_metrics:
+                                            st.markdown("### Confusion Matrix")
+                                            cm = quality_metrics['confusion_matrix']
+                                            cm_df = pd.DataFrame([
+                                                [cm['true_negative'], cm['false_positive']],  # First row: TN, FP
+                                                [cm['false_negative'], cm['true_positive']]   # Second row: FN, TP
+                                            ], 
+                                            columns=['Predicted: Negative', 'Predicted: Positive'],
+                                            index=['Actual: Negative', 'Actual: Positive'])
+                                            
+                                            st.dataframe(cm_df.style.background_gradient(cmap='Blues'))  
                         
-                        # Confusion Matrix visualization (only for classification)
-                        if target_type == "classification" and quality_metrics and 'confusion_matrix' in quality_metrics:
-                            st.markdown("### 混淆矩陣")
-                            cm = quality_metrics['confusion_matrix']
-                            cm_df = pd.DataFrame([
-                                [cm['true_negative'], cm['false_positive']],
-                                [cm['false_negative'], cm['true_positive']]
-                            ], 
-                            columns=['預測: 陰性', '預測: 陽性'],
-                            index=['實際: 陰性', '實際: 陽性'])
+                        # # Confusion Matrix visualization (only for classification)
+                        # if target_type == "classification" and quality_metrics and 'confusion_matrix' in quality_metrics:
+                        #     st.markdown("### Confusion Matrix")
+                        #     cm = quality_metrics['confusion_matrix']
+                        #     cm_df = pd.DataFrame([
+                        #         [cm['true_positive'], cm['false_positive']],
+                        #         [cm['true_negative'], cm['false_negative']]
+                        #     ], 
+                        #     columns=['true_positive', 'false_positive'],
+                        #     index=['true_negative', 'false_negative'])
                             
-                            st.dataframe(cm_df.style.background_gradient(cmap='Blues'))
+                        #     st.dataframe(cm_df.style.background_gradient(cmap='Blues'))
                         
                         if fairness_result and fairness_metrics and 'group_metrics' in fairness_metrics:
-                            st.markdown("### ⚖️ 公平性評估")
+                            st.markdown("### ⚖️ Fairness Analysis")
                             protected_attr_names = list(fairness_metrics['group_metrics'].keys())
-                            tabs = st.tabs([f"{attr} 分析" for attr in protected_attr_names])
+                            tabs = st.tabs([f"{attr} " for attr in protected_attr_names])
                             
                             for tab, attr in zip(tabs, protected_attr_names):
                                 with tab:
@@ -310,11 +346,11 @@ def main():
                                     # Display metrics based on target type
                                     if target_type == "classification":
                                         if 'group_0_accuracy' in metrics:
-                                            cols[0].metric("Group 0 準確率", f"{float(metrics['group_0_accuracy'])*100:.1f}%")
+                                            cols[0].metric("Group 0 accuracy", f"{float(metrics['group_0_accuracy'])*100:.1f}%")
                                         if 'group_0_precision' in metrics:
-                                            cols[1].metric("Group 0 精確率", f"{float(metrics['group_0_precision'])*100:.1f}%")
+                                            cols[1].metric("Group 0 precision", f"{float(metrics['group_0_precision'])*100:.1f}%")
                                         if 'group_0_recall' in metrics:
-                                            cols[2].metric("Group 0 召回率", f"{float(metrics['group_0_recall'])*100:.1f}%")
+                                            cols[2].metric("Group 0 recall", f"{float(metrics['group_0_recall'])*100:.1f}%")
                                     else:  # regression
                                         if 'group_0_rmse' in metrics:
                                             cols[0].metric("Group 0 RMSE", f"{float(metrics['group_0_rmse']):.3f}")
@@ -324,7 +360,7 @@ def main():
                                             cols[2].metric("Group 0 R²", f"{float(metrics['group_0_r2']):.3f}")
                         
                         if drift_result:
-                            st.markdown("### 📈 數據漂移分析")
+                            st.markdown("### 📈 Drift Analysis")
                             
                             # 處理漂移分析文本
                             drift_lines = drift_result.split('\n')
@@ -362,7 +398,7 @@ def main():
                             
                             # 顯示顯著特徵漂移
                             if significant_drifts:
-                                st.markdown("#### 顯著特徵漂移 (>3%)")
+                                st.markdown("#### Significantly Drift (>3%)")
                                 for feature, drift_value in significant_drifts:
                                     # 根據漂移程度使用不同顏色
                                     if abs(drift_value) > 5:
@@ -370,11 +406,11 @@ def main():
                                     else:
                                         st.markdown(f"- {feature}: :orange[{drift_value:+.2f}%]")
                             else:
-                                st.info("未檢測到顯著的特徵漂移")
+                                st.info("No significant feature drift was detected")
 
                         # 改進建議
                         if improve_result:
-                            st.markdown("### 💡 改進建議")
+                            st.markdown("### 💡 Recommendation")
                             st.divider()  # 添加分隔線
                             
                             # 移除 expander，直接顯示建議
