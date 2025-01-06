@@ -314,24 +314,12 @@ def main():
                                             cm_df = pd.DataFrame([
                                                 [cm['true_negative'], cm['false_positive']],  # First row: TN, FP
                                                 [cm['false_negative'], cm['true_positive']]   # Second row: FN, TP
-                                            ], 
-                                            columns=['Predicted: Negative', 'Predicted: Positive'],
-                                            index=['Actual: Negative', 'Actual: Positive'])
+                                            ],
+                                            columns=['Predicted N', 'Predicted P'],
+                                            index=['Actual N', 'Actual P'])
                                             
-                                            st.dataframe(cm_df.style.background_gradient(cmap='Blues'))  
+                                            st.dataframe(cm_df.style.background_gradient(cmap='Blues'))
                         
-                        # # Confusion Matrix visualization (only for classification)
-                        # if target_type == "classification" and quality_metrics and 'confusion_matrix' in quality_metrics:
-                        #     st.markdown("### Confusion Matrix")
-                        #     cm = quality_metrics['confusion_matrix']
-                        #     cm_df = pd.DataFrame([
-                        #         [cm['true_positive'], cm['false_positive']],
-                        #         [cm['true_negative'], cm['false_negative']]
-                        #     ], 
-                        #     columns=['true_positive', 'false_positive'],
-                        #     index=['true_negative', 'false_negative'])
-                            
-                        #     st.dataframe(cm_df.style.background_gradient(cmap='Blues'))
                         
                         if fairness_result and fairness_metrics and 'group_metrics' in fairness_metrics:
                             st.markdown("### ⚖️ Fairness Analysis")
