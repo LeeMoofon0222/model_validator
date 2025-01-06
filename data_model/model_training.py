@@ -11,7 +11,8 @@ from sklearn.metrics import accuracy_score, confusion_matrix, roc_curve, auc, f1
 import joblib
 import json
 from datetime import datetime
-
+from sklearn.svm import SVC
+from sklearn.preprocessing import StandardScaler
 
 
 
@@ -57,63 +58,48 @@ def split_data(data, target_column, test_size=0.2):
     test_data = pd.concat([X_test, y_test], axis=1)
     
     # 保存訓練集和測試集
-    # train_data.to_csv('train.csv', index=False)
-    # test_data.to_csv('test.csv', index=False)
+    train_data.to_csv('train.csv', index=False)
+    test_data.to_csv('test.csv', index=False)
     
     return X_train, X_test, y_train, y_test
 
 
 def train_model(X_train, y_train, X_test, y_test, model_type='rf', params=None):
     """
-    訓練模型並返回預測結果
-    model_type: 'rf'(RandomForest), 'xgb'(XGBoost), 'lgbm'(LightGBM)
+    訓練分類模型並返回預測結果
+    model_type: 'rf'(RandomForest), 'xgb'(XGBoost), 'lgbm'(LightGBM), 'svm'(Support Vector Machine)
     """
-    # 默認參數
     default_params = {
-        'rf': {
-            'n_estimators': 100,
-            'max_depth': 10,
-            'random_state': 42
-        },
-        'xgb': {
-            'n_estimators': 100,
-            'max_depth': 6,
-            'learning_rate': 0.1,
-            'random_state': 42
-        },
-        'lgbm': {
-            'n_estimators': 100,
-            'num_leaves': 31,
-            'random_state': 42
-        }
+        'rf': {'n_estimators': 100, 'max_depth': 10, 'random_state': 42},
+        'xgb': {'n_estimators': 100, 'max_depth': 6, 'learning_rate': 0.1, 'random_state': 42},
+        'lgbm': {'n_estimators': 100, 'num_leaves': 31, 'random_state': 42},
+        'svm': {'kernel': 'rbf', 'probability': True, 'random_state': 42}
     }
 
     model_params = params if params else default_params[model_type]
 
-    # 選擇模型
     models = {
         'rf': RandomForestClassifier,
         'xgb': XGBClassifier,
-        'lgbm': LGBMClassifier
+        'lgbm': LGBMClassifier,
+        'svm': SVC
     }
 
-    # 訓練模型
+    if model_type == 'svm':
+        scaler = StandardScaler()
+        X_train = scaler.fit_transform(X_train)
+        X_test = scaler.transform(X_test)
+
     model = models[model_type](**model_params)
     model.fit(X_train, y_train)
     
-    # 預測
     y_pred = model.predict(X_test)
-    y_pred_proba = model.predict_proba(X_test)[:, 1]
+    y_pred_proba = model.predict_proba(X_test)[:, 1] if model_type != 'svm' else model.predict_proba(X_test)[:, 1] if hasattr(model, 'predict_proba') else y_pred
     
-    # 評估
     metrics = evaluate_model(y_pred, y_test)
     
-    return {
-        'model': model,
-        'predictions': y_pred,
-        'probabilities': y_pred_proba,
-        'metrics': metrics
-    }
+    return {'model': model, 'predictions': y_pred, 'probabilities': y_pred_proba, 'metrics': metrics}
+
 
 
 def evaluate_model(y_pred, y_true, save_path=None):
@@ -157,57 +143,41 @@ def evaluate_model(y_pred, y_true, save_path=None):
 def train_regression_model(X_train, y_train, X_test, y_test, model_type='rf', params=None):
     """
     訓練回歸模型並返回預測結果
-    model_type: 'rf'(RandomForest), 'xgb'(XGBoost), 'lgbm'(LightGBM)
+    model_type: 'rf'(RandomForest), 'xgb'(XGBoost), 'lgbm'(LightGBM), 'svm'(Support Vector Regression)
     """
     from sklearn.ensemble import RandomForestRegressor
     from xgboost import XGBRegressor
     from lightgbm import LGBMRegressor
-    from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-    
-    # 默認參數
+    from sklearn.svm import SVR
+
     default_params = {
-        'rf': {
-            'n_estimators': 100,
-            'max_depth': 10,
-            'random_state': 42
-        },
-        'xgb': {
-            'n_estimators': 100,
-            'max_depth': 6,
-            'learning_rate': 0.1,
-            'random_state': 42
-        },
-        'lgbm': {
-            'n_estimators': 100,
-            'num_leaves': 31,
-            'random_state': 42
-        }
+        'rf': {'n_estimators': 100, 'max_depth': 10, 'random_state': 42},
+        'xgb': {'n_estimators': 100, 'max_depth': 6, 'learning_rate': 0.1, 'random_state': 42},
+        'lgbm': {'n_estimators': 100, 'num_leaves': 31, 'random_state': 42},
+        'svm': {'kernel': 'rbf'}
     }
 
     model_params = params if params else default_params[model_type]
 
-    # 選擇回歸模型
     models = {
         'rf': RandomForestRegressor,
         'xgb': XGBRegressor,
-        'lgbm': LGBMRegressor
+        'lgbm': LGBMRegressor,
+        'svm': SVR
     }
 
-    # 訓練模型
+    if model_type == 'svm':
+        scaler = StandardScaler()
+        X_train = scaler.fit_transform(X_train)
+        X_test = scaler.transform(X_test)
+
     model = models[model_type](**model_params)
     model.fit(X_train, y_train)
     
-    # 預測
     y_pred = model.predict(X_test)
-    
-    # 評估
     metrics = evaluate_regression_model(y_pred, y_test)
     
-    return {
-        'model': model,
-        'predictions': y_pred,
-        'metrics': metrics
-    }
+    return {'model': model, 'predictions': y_pred, 'metrics': metrics}
 
 
 def evaluate_regression_model(y_pred, y_true, save_path=None):
@@ -256,7 +226,7 @@ def evaluate_regression_model(y_pred, y_true, save_path=None):
 # 使用範例
 if __name__ == "__main__":
     # 讀取資料
-    data = pd.read_csv('data_model/income/cleaned_data.csv')
+    data = pd.read_csv('data_model/diabetes/origin.csv')
     data = data.astype(int)
     # # 數據預處理
     # data = process_data(data, categorical_columns=['col1', 'col2'], target_column='target')
@@ -268,33 +238,19 @@ if __name__ == "__main__":
     # data = create_sample(data, target_column='target', sample_size=5000)
     
     # 分割資料
-    X_train, X_test, y_train, y_test = split_data(data, target_column='income')
+    X_train, X_test, y_train, y_test = split_data(data, target_column='Diabetes_binery')
 
 
     # 使用隨機森林
     # results = train_model(X_train, y_train, X_test, y_test, model_type='rf')
     
     # 使用XGBoost，自定義參數
-    custom_params = {'n_estimators': 300, 'max_depth': 6, 'learning_rate': 0.05}
-    results = train_regression_model(X_train, y_train, X_test, y_test, model_type='xgb', params=custom_params)
+    # custom_params = {'n_estimators': 300, 'max_depth': 6, 'learning_rate': 0.05}
+    # results = train_model(X_train, y_train, X_test, y_test, model_type='xgb', params=custom_params)
     
-    # 使用LightGBM
-    # results = train_model(X_train, y_train, X_test, y_test, model_type='lgbm')
+    # 使用svm
+    results = train_model(X_train, y_train, X_test, y_test, model_type='svm')
 
 
 
-    joblib.dump(results['model'], 'xgb.joblib')
-
-
-    # loaded_model = joblib.load('diabetes_model_rf.joblib')  # 載入模型
-    # if loaded_model:        
-    #     # 進行預測
-    #     y_pred = loaded_model.predict(X_test)
-
-    #     # 評估模型
-    #     metrics = evaluate_model(y_pred, y_test)
-
-    #     # 打印評估指標
-    #     print(f"Accuracy: {metrics['accuracy']:.4f}")
-    #     print(f"F1-Score: {metrics['f1_score']:.4f}")
-    #     print(f"ROC AUC: {metrics['roc_auc']:.4f}")
+    joblib.dump(results['model'], 'svm.joblib')

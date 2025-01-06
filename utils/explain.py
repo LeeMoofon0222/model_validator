@@ -79,68 +79,21 @@ def explain_prediction_lime(model_path, sample, train_data, feature_names,
 
 
 
-def explain_prediction_shap(model_path, sample, feature_names):
-    """
-    使用 SHAP 解釋預測結果
-    """
-    try:
-        # 載入模型
-        model = joblib.load(model_path)
-        
-        # 確保 sample 維度正確
-        if len(sample) > len(feature_names):
-            sample = sample[:-1]
-        
-        # 創建包含特徵名稱的 DataFrame
-        sample_df = pd.DataFrame([sample], columns=feature_names)
-        
-        # 初始化 SHAP 解釋器
-        explainer_shap = shap.TreeExplainer(model)
-        
-        # 計算 SHAP 值
-        shap_values = explainer_shap.shap_values(sample_df)
-        
-        # 對於二分類問題，處理 SHAP 值
-        if isinstance(shap_values, list):
-            # 取得正類的 SHAP 值（通常是類別 1）
-            class_1_shap_values = shap_values[1][0]  # [0] 為第一個（唯一）樣本
-        else:
-            class_1_shap_values = shap_values[0]
-            
-        # 建立特徵重要性字典
-        feature_importance = {}
-        for feat_name, shap_val in zip(feature_names, class_1_shap_values):
-            # 確保每個值是標量
-            if isinstance(shap_val, np.ndarray):
-                # 如果是數組，取第一個值（對於二分類，通常只需要一個值）
-                shap_val = shap_val[0]
-            feature_importance[feat_name] = float(shap_val)
-        
-        # 按絕對值大小排序
-        feature_importance = dict(sorted(
-            feature_importance.items(), 
-            key=lambda x: abs(x[1]), 
-            reverse=True
-        ))
-        
-        # 找出最重要的正面和負面特徵
-        positive_features = [(k, v) for k, v in feature_importance.items() if v > 0]
-        negative_features = [(k, v) for k, v in feature_importance.items() if v < 0]
-        
-        return {
-            'shap_values': class_1_shap_values,
-            'feature_importance': feature_importance,
-            'meta': {
-                'top_positive_features': positive_features[:5],  # 前5個正面影響
-                'top_negative_features': negative_features[:5]   # 前5個負面影響
-            }
-        }
-        
-    except Exception as e:
-        print(f"SHAP 解釋過程中發生錯誤: {str(e)}")
-        print(f"Sample 形狀: {sample.shape}")
-        print(f"特徵數量: {len(feature_names)}")
-        print(f"模型類型: {type(model).__name__}")
-        if 'shap_values' in locals():
-            print(f"SHAP 值形狀: {np.array(shap_values).shape}")
-        raise
+def explain_global_shap(model_path, test_data, feature_names, model_type):
+   model = joblib.load(model_path)
+   X_subset = test_data.sample(n=min(100, len(test_data)), random_state=42)
+   
+   explainer = shap.TreeExplainer(model) if model_type in ["Random Forest", "XGBoost"] else shap.KernelExplainer(model.predict_proba, shap.sample(X_subset, 50))
+   
+   shap_values = explainer.shap_values(X_subset)
+   if isinstance(shap_values, list):
+       shap_values = shap_values[1]
+   
+   importance_dict = {}
+   mean_abs_shap = np.mean(np.abs(shap_values), axis=0)
+   mean_abs_shap = mean_abs_shap.reshape(-1)  # 確保是1D array
+   
+   for i, name in enumerate(feature_names):
+       importance_dict[name] = float(mean_abs_shap[i])
+       
+   return dict(sorted(importance_dict.items(), key=lambda x: x[1], reverse=True))

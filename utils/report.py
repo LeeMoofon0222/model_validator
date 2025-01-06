@@ -258,10 +258,10 @@ def call_gpt_api(model_type, metrics_text):
     ]
 
     response = client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4",
         messages=messages,
         temperature=0.7,
-        max_tokens=5000
+        max_tokens=4000
     )
 
     return response.choices[0].message.content.strip()

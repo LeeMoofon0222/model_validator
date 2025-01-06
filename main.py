@@ -19,7 +19,7 @@ def main():
     st.sidebar.subheader("Model Settings")
     model_type = st.sidebar.selectbox(
         "Select Model Type",
-        ["Random Forest", "XGBoost", "LightGBM"]
+        ["Random Forest", "XGBoost", "SVM"]
     )
     
     # Model file upload
@@ -135,10 +135,11 @@ def main():
                                     target_type=target_type
                                 )
                             elif explain_method == "SHAP":
-                                explanation_metrics = explain.explain_prediction_shap(
+                                explanation_metrics = explain.explain_global_shap(
                                     model_path=model_path,
-                                    sample=sample,
-                                    feature_names=feature_names
+                                    test_data=test_data.drop(columns=[target_column]),
+                                    feature_names=feature_names,
+                                    model_type=model_type
                                 )
                         
                         if quality_check:
@@ -147,7 +148,8 @@ def main():
                                 test_data=test_data.drop(columns=[target_column]),
                                 test_labels=test_data[target_column],
                                 feature_names=feature_names,
-                                target_type=target_type
+                                target_type=target_type,
+                                model_type=model_type
                             )
                             
                             if target_type == "classification":
@@ -213,25 +215,26 @@ def main():
                         
                         with col1:
                             if explanation_result:
-                                st.markdown("### 🎯 Local Explanations")
-                                # Extract prediction probability
-                                if target_type == "classification":
-                                    if "probability: [" in explanation_result:
+                                if explain_method == "LIME":
+                                    st.markdown("### 🎯 Local Explanations")
+                                    if target_type == "classification" and "probability: [" in explanation_result:
                                         prob = [float(p) for p in explanation_result.split("probability: [")[1].split("]")[0].split()]
                                         st.metric("Predicted Probability", f"{prob[1]*100:.1f}%")
-                                else:  # regression
-                                    if "Predicted value:" in explanation_result:
+                                    elif target_type == "regression" and "Predicted value:" in explanation_result:
                                         pred_value = float(explanation_result.split("Predicted value:")[1].split("\n")[0])
                                         st.metric("Predicted Value", f"{pred_value:.3f}")
-                                
-                                # Feature importance
-                                st.markdown("#### Main Features")
-                                for line in explanation_result.split("\n"):
-                                    if ":" in line and ("+" in line or "-" in line):
-                                        feature, impact = line.split(":")
-                                        impact = impact.strip()
-                                        color = "green" if "+" in impact else "red"
-                                        st.markdown(f"- {feature}: :{color}[{impact}]")
+                                    
+                                    st.markdown("#### Main Features")
+                                    for line in explanation_result.split("\n"):
+                                        if ":" in line and ("+" in line or "-" in line):
+                                            feature, impact = line.split(":")
+                                            impact = impact.strip()
+                                            color = "green" if "+" in impact else "red"
+                                            st.markdown(f"- {feature}: :{color}[{impact}]")
+                                else:  # SHAP
+                                    st.markdown("### 🎯 Global Feature Importance")
+                                    for feature, importance in explanation_metrics.items():
+                                        st.markdown(f"- {feature}: :blue[{importance:.4f}]")
                         
                         with col2:
                             if quality_result:
@@ -287,7 +290,7 @@ def main():
    
                                 # # Display Feature Importance
                                 if '特徵重要性' in quality_metrics:
-                                    st.markdown("#### Features Importance (Top 10)")
+                                    st.markdown("##### Top 10 Important Features")
                                     # Sort features by importance and get top 10
                                     sorted_features = sorted(
                                         quality_metrics['特徵重要性'].items(), 
@@ -309,7 +312,20 @@ def main():
                                     with imp_col2:
                                         # Confusion Matrix visualization (only for classification)
                                         if target_type == "classification" and quality_metrics and 'confusion_matrix' in quality_metrics:
-                                            st.markdown("### Confusion Matrix")
+                                            st.markdown("##### Confusion Matrix")
+                                            cm = quality_metrics['confusion_matrix']
+                                            cm_df = pd.DataFrame([
+                                                [cm['true_negative'], cm['false_positive']],  # First row: TN, FP
+                                                [cm['false_negative'], cm['true_positive']]   # Second row: FN, TP
+                                            ],
+                                            columns=['Predicted N', 'Predicted P'],
+                                            index=['Actual N', 'Actual P'])
+                                            
+                                            st.dataframe(cm_df.style.background_gradient(cmap='Blues'))
+                                else:
+                                    # Confusion Matrix visualization (only for classification)
+                                        if target_type == "classification" and quality_metrics and 'confusion_matrix' in quality_metrics:
+                                            st.markdown("##### Confusion Matrix")
                                             cm = quality_metrics['confusion_matrix']
                                             cm_df = pd.DataFrame([
                                                 [cm['true_negative'], cm['false_positive']],  # First row: TN, FP
@@ -399,7 +415,6 @@ def main():
                         # 改進建議
                         if improve_result:
                             st.markdown("### 💡 Recommendation")
-                            st.divider()  # 添加分隔線
                             
                             # 移除 expander，直接顯示建議
                             lines = improve_result.split('\n')

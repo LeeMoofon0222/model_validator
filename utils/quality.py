@@ -4,7 +4,7 @@ import numpy as np
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 
 
-def assess_model_quality(model_path, test_data, test_labels, feature_names, target_type):
+def assess_model_quality(model_path, test_data, test_labels, feature_names, target_type, model_type):
     """評估模型品質指標
     
     Parameters:
@@ -79,7 +79,7 @@ def assess_model_quality(model_path, test_data, test_labels, feature_names, targ
         raise ValueError(f"不支持的目標類型: {target_type}，必須是 'classification' 或 'regression'")
     
     # 如果模型有特徵重要性，加入分析
-    if hasattr(model, 'feature_importances_'):
+    if hasattr(model, 'feature_importances_') and model_type != 'SVM':
         feature_importance = dict(zip(feature_names, 
                                     model.feature_importances_.astype(float)))
         quality_metrics['特徵重要性'] = feature_importance
